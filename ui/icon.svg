@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- A run as the page draws it: one agent, a phase of three, one agent, on a spine.
+       The grey is baked in because the sidebar loads this file as an <img>, where
+       currentColor cannot see the page and falls back to black. Both greys are the
+       Rose Pine muted tokens, and prefers-color-scheme follows the same system
+       setting the dashboard does. -->
+  <style>.g{stroke:#716c7f}@media (prefers-color-scheme:dark){.g{stroke:#84809a}}</style>
+  <g class="g">
+    <circle cx="12" cy="4.5" r="2.25"/>
+    <circle cx="4.75" cy="12" r="2.25"/>
+    <circle cx="12" cy="12" r="2.25"/>
+    <circle cx="19.25" cy="12" r="2.25"/>
+    <circle cx="12" cy="19.5" r="2.25"/>
+    <path d="M12 6.75v3M12 14.25v3"/>
+  </g>
+</svg>
