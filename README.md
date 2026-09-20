@@ -1,10 +1,10 @@
 # Workflow Lens
 
-**For Claude Code dynamic workflows.** When a Claude session runs a workflow, its
-subagents work out of sight, and the KiroCrew chat shows none of them. This
-[KiroCrew](https://github.com/kirodotdev/KiroCrew) app reads what Claude Code writes to
-disk and shows the phases a run declared, which agents are live, what shape the run
-took, and what it and each of its agents answered with.
+**Make Claude Code's dynamic workflows visible as they happen.** Follow progress,
+understand workflow patterns, and read individual subagent outputs. This
+[KiroCrew](https://github.com/kirodotdev/KiroCrew) app reads the artifacts Claude Code
+writes to disk, making work that is usually opaque easier to follow and learn from.
+Live views refresh from those artifacts; they are not a token-by-token stream.
 
 ![A generate-and-filter run: its phases, agents and the shape it took](assets/screenshots/shape.png)
 
@@ -16,6 +16,17 @@ The runs in these screenshots are invented for illustration.
 Claude Code CLI or from a KiroCrew session backed by Claude. The app reads the
 artifacts Claude Code writes under `~/.claude/projects` on the gateway's machine, so
 on a machine with no workflow runs the page is empty.
+
+## When to use it
+
+- **Follow work while it happens.** While Claude runs a workflow, see which phases
+  and subagents are active and read available outputs as work progresses.
+- **Learn how workflows work.** Explore a run's patterns and the evidence behind
+  them, from fan-out and pipelines to repeated attempts.
+- **Look beyond the final summary.** Read individual subagent outputs to compare
+  their answers and understand how the workflow reached its conclusion.
+- **Try a pattern yourself.** Choose a shape, add your task, and open the prepared
+  prompt in the chat composer or copy it to a workflow-capable Claude session.
 
 ## What it shows
 
@@ -29,6 +40,28 @@ on a machine with no workflow runs the page is empty.
   markdown and fetched only when opened.
 - **Launchers** — start a new workflow in a chosen shape, with the task filled in or
   the prompt copied.
+
+## Walkthrough: compare ideas, then inspect the reasoning
+
+With the app installed and a workflow-capable Claude Code session available:
+
+1. Open **Start a workflow** and enter a task such as: "Propose three ways to make
+   a small project's README clearer. Compare their tradeoffs and recommend one.
+   Do not edit files."
+2. Choose **Fan-out and synthesize** and select **Use this shape**. Review the
+   prepared prompt in the chat composer before sending it to a Claude-backed
+   session. Alternatively, use **Copy prompt** in a workflow-capable Claude Code
+   session on the same machine as the gateway.
+3. Once Claude starts the workflow and writes its artifacts, find the run in
+   Workflow Lens. Follow the active phases and subagents as the view refreshes.
+4. Open the shape chips to learn what each pattern means and which observations
+   support it. The declared plan is shown separately from what actually happened.
+5. Use **Read output** on individual agents as their answers become available.
+   Compare those proposals with the final output once the workflow finishes.
+
+The launcher prepares a prompt; it does not execute the workflow or add workflow
+capabilities to a session. Only outputs present in Claude Code's artifacts can be
+shown.
 
 ## How a shape is decided
 

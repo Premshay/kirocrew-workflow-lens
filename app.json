@@ -1,11 +1,17 @@
 {
   "name": "workflow-lens",
   "displayName": "Workflow Lens",
-  "version": "2.0.1",
-  "description": "For Claude Code dynamic workflows. When a Claude session runs a workflow, its subagents work out of sight and the KiroCrew chat shows none of them. Workflow Lens reads what Claude Code writes to disk and shows each phase, which agents are live, what they answered, and the shape the run took.",
+  "version": "2.0.2",
+  "description": "Make Claude Code's dynamic workflows visible as they happen. Follow progress, understand workflow patterns, and read individual subagent outputs.",
   "author": "premshay",
   "license": "MIT",
   "iconPath": "assets/icon.png",
+  "useCases": [
+    "While Claude runs a workflow, see which phases and subagents are active and read available outputs as work progresses.",
+    "When you want to understand how a workflow works, explore its patterns and the evidence behind them, from fan-out and pipelines to repeated attempts.",
+    "When a final summary leaves questions unanswered, read individual subagent outputs to compare their answers and understand the conclusion.",
+    "When you want to try a pattern yourself, choose a shape, add your task, and open the prepared prompt in the chat composer or copy it to a workflow-capable Claude session."
+  ],
   "highlights": [
     "Shows the subagents a Claude Code dynamic workflow runs in the background, which the KiroCrew chat never surfaces",
     "Every phase and agent of a run, with live agents marked and finished ones filled or hollow by whether they returned",
