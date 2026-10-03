@@ -7,6 +7,11 @@ against a live three-agent run on 2026-09-11 whose transcript held zero
 ``async_task_*`` updates. The files are the only record that carries the work, so
 this serves them.
 
+DeepSeek Harness Agent Teams are a second source (``dsh_teams.py``): their
+teammates are just as invisible to the gateway, and the Lead's session log
+records them. Both sources produce the same run shape, so the page renders a
+team with the same card.
+
 Read-only by construction. Every handler answers from disk; there is no write
 path, and the app declares no storage.
 """
@@ -24,28 +29,44 @@ from kiro_crew.apps.context import AppContext
 from kiro_crew.apps.route_registry import AppRoute
 
 
-def _reader() -> Any:
-    """The reader module that lives beside this file.
+def _sibling(filename: str, name: str) -> Any:
+    """A module that lives beside this file, loaded once.
 
     Loaded by path rather than imported by name: an installed app is a COPY
     under the data home, so its backend package is not on ``sys.path`` and the
-    module name is not importable. Cached on first use.
+    module name is not importable.
     """
-    global _READER_MODULE
-    if _READER_MODULE is not None:
-        return _READER_MODULE
-    path = Path(__file__).resolve().parent / "reader.py"
-    spec = importlib.util.spec_from_file_location("workflow_lens_reader", path)
+    if name in _MODULES:
+        return _MODULES[name]
+    path = Path(__file__).resolve().parent / filename
+    spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:  # pragma: no cover - packaging error
-        raise RuntimeError(f"workflow-lens reader missing at {path}")
+        raise RuntimeError(f"workflow-lens module missing at {path}")
     module = importlib.util.module_from_spec(spec)
-    sys.modules.setdefault("workflow_lens_reader", module)
+    sys.modules.setdefault(name, module)
     spec.loader.exec_module(module)
-    _READER_MODULE = module
+    _MODULES[name] = module
     return module
 
 
-_READER_MODULE: Any = None
+_MODULES: dict[str, Any] = {}
+
+
+def _reader() -> Any:
+    """The Claude Code workflow reader."""
+    return _sibling("reader.py", "workflow_lens_reader")
+
+
+def _teams() -> Any:
+    """The DeepSeek Harness Agent Teams reader."""
+    return _sibling("dsh_teams.py", "workflow_lens_dsh_teams")
+
+
+def _all_runs(now: float) -> list[dict[str, Any]]:
+    """Claude Code workflow runs and dsh teams together, newest first."""
+    runs = list(_reader().discover_runs()) + _teams().discover_team_runs(now)
+    runs.sort(key=lambda r: r["updated_at"], reverse=True)
+    return runs
 
 
 def _require_user(request: web.Request) -> None:
@@ -60,6 +81,11 @@ def _decorate(run: dict[str, Any], now: float) -> dict[str, Any]:
     agents = []
     for agent in run.get("agents") or []:
         state, idle = reader._agent_state(agent, now)
+        # A dsh member says outright whether its turn is open, which beats a
+        # reading of how recently it wrote: a teammate that answered a minute
+        # ago is done, not live.
+        if agent.get("turn_open") is False and state == "live":
+            state = "stale"
         agents.append({**agent, "state": state, "idle": idle})
     return {
         **run,
@@ -80,7 +106,7 @@ async def _list_runs(request: web.Request, _ctx: AppContext) -> web.Response:
     except ValueError:
         raise web.HTTPBadRequest(text="limit must be a number") from None
     now = time.time()
-    runs = [_decorate(run, now) for run in reader.discover_runs()[:limit]]
+    runs = [_decorate(run, now) for run in _all_runs(now)[:limit]]
     return web.json_response(
         {
             "runs": runs,
@@ -92,10 +118,9 @@ async def _list_runs(request: web.Request, _ctx: AppContext) -> web.Response:
 
 async def _get_run(request: web.Request, _ctx: AppContext) -> web.Response:
     _require_user(request)
-    reader = _reader()
     run_id = request.match_info["run_id"]
     now = time.time()
-    for run in reader.discover_runs():
+    for run in _all_runs(now):
         if run["run_id"] == run_id:
             return web.json_response({"run": _decorate(run, now), "generated_at": now})
     raise web.HTTPNotFound(text=f"no run named {run_id}")
@@ -111,7 +136,11 @@ async def _get_result(request: web.Request, _ctx: AppContext) -> web.Response:
     _require_user(request)
     reader = _reader()
     run_id = request.match_info["run_id"]
-    text = reader.find_result(run_id)
+    teams = _teams()
+    if run_id.startswith(teams.RUN_PREFIX):
+        text = teams.find_team_result(run_id)
+    else:
+        text = reader.find_result(run_id)
     if text is None:
         raise web.HTTPNotFound(text=f"no run named {run_id}")
     return web.json_response(
@@ -134,7 +163,11 @@ async def _get_agent_output(request: web.Request, _ctx: AppContext) -> web.Respo
     reader = _reader()
     run_id = request.match_info["run_id"]
     agent_id = request.match_info["agent_id"]
-    text = reader.find_agent_output(run_id, agent_id)
+    teams = _teams()
+    if run_id.startswith(teams.RUN_PREFIX):
+        text = teams.find_team_agent_output(run_id, agent_id)
+    else:
+        text = reader.find_agent_output(run_id, agent_id)
     if text is None:
         raise web.HTTPNotFound(text=f"no agent {agent_id} in {run_id}")
     return web.json_response(

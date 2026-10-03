@@ -128,6 +128,15 @@ const CSS = `
 .wfr-shape-blurb{font-size:12px;color:var(--muted);margin:5px 0 11px;line-height:1.5}
 .wfr-flow{overflow-x:auto}
 .wfr-flow svg{display:block;overflow:visible}
+.wfr-team{margin-top:16px;border-top:1px solid var(--border);padding-top:13px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px 32px}
+.wfr-team>*{min-width:0}
+@container (min-width:820px){.wfr-team{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.wfr-team-title{font-size:13px;font-weight:600;color:var(--text-strong,var(--text));margin-bottom:6px}
+.wfr-team-row{display:flex;align-items:baseline;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px;line-height:1.5}
+.wfr-team-row:last-child{border-bottom:0}
+.wfr-team-main{flex:1;min-width:0;overflow-wrap:anywhere;color:var(--text)}
+.wfr-team-meta{color:var(--muted);white-space:nowrap}
+.wfr-team-scope{font-family:var(--mono,ui-monospace,monospace);font-size:11px;color:var(--muted)}
 @keyframes wfpulse{0%,100%{opacity:1}50%{opacity:.35}}
 .wfr-live-dot{animation:wfpulse 1.8s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){.wfr-live-dot{animation:none}}
@@ -627,6 +636,7 @@ function RunCard({ run, expanded, onToggle }) {
                 bg: statusBg, fg: statusFg, id: statusNoteId,
               })
             : pill(statusWord, statusBg, statusFg),
+          run.source === 'dsh-team' ? pill('DeepSeek team', 'var(--bg-hover, #f3f4f6)', 'var(--muted, #6b7280)') : null,
           run.resumed_after_status && !run.live_agents ? pill('resumed after it stopped', 'var(--warn-subtle, #fef3c7)', 'var(--warn, #b45309)') : null,
           _jsx('span', { className: 'wfr-spacer', children: ghostButton(expanded ? 'Collapse' : `All ${agents.length} agents`, onToggle, false) }),
         ],
@@ -723,7 +733,73 @@ function RunCard({ run, expanded, onToggle }) {
           }),
         ],
       }),
+      run.team ? _jsx(TeamPanel, { team: run.team, expanded }) : null,
       run.has_result ? _jsx(ResultPane, { run }) : null,
+    ],
+  })
+}
+
+// A dsh Agent Team carries what a Claude workflow has no equivalent for: a task
+// board the members claim work from, and messages they send each other. Both
+// come from the Lead's session log; the page shows them under the agents
+// because they explain what the agents are doing.
+const TASK_STYLE = {
+  pending: { bg: 'var(--bg-hover, #f3f4f6)', fg: 'var(--muted, #6b7280)', label: 'pending' },
+  in_progress: { bg: 'var(--ok-subtle, #d1fae5)', fg: 'var(--ok, #047857)', label: 'in progress' },
+  completed: { bg: 'var(--accent-subtle, #e8d5f5)', fg: ACCENT, label: 'done' },
+}
+
+function TeamPanel({ team, expanded }) {
+  const tasks = team.tasks || []
+  const messages = team.messages || []
+  const shownMessages = expanded ? messages : messages.slice(-6)
+  return _jsxs('div', {
+    className: 'wfr-team',
+    children: [
+      _jsxs('div', {
+        children: [
+          _jsx('div', { className: 'wfr-team-title', children: `Task board · ${tasks.length}` }),
+          tasks.length
+            ? tasks.map(t => {
+                const st = TASK_STYLE[t.status] || TASK_STYLE.pending
+                return _jsxs('div', {
+                  className: 'wfr-team-row',
+                  children: [
+                    pill(st.label, st.bg, st.fg),
+                    _jsxs('span', {
+                      className: 'wfr-team-main',
+                      children: [
+                        t.subject,
+                        t.write_scopes && t.write_scopes.length
+                          ? _jsx('div', { className: 'wfr-team-scope', children: t.write_scopes.join(', ') })
+                          : null,
+                      ],
+                    }),
+                    _jsx('span', { className: 'wfr-team-meta', children: t.owner || 'unclaimed' }),
+                  ],
+                }, t.id)
+              })
+            : _jsx('div', { className: 'wfr-team-meta', children: 'The Lead has put no tasks on the board.' }),
+        ],
+      }),
+      _jsxs('div', {
+        children: [
+          _jsx('div', { className: 'wfr-team-title', children: `Messages · ${messages.length}` }),
+          messages.length
+            ? shownMessages.map((m, i) => _jsxs('div', {
+                className: 'wfr-team-row',
+                children: [
+                  _jsx('span', { className: 'wfr-team-meta', children: `${m.from} → ${m.to}` }),
+                  _jsx('span', { className: 'wfr-team-main', children: m.text }),
+                  m.delivered ? null : pill('queued', 'var(--warn-subtle, #fef3c7)', 'var(--warn, #b45309)'),
+                ],
+              }, i))
+            : _jsx('div', { className: 'wfr-team-meta', children: 'No messages between members yet.' }),
+          !expanded && messages.length > shownMessages.length
+            ? _jsx('div', { className: 'wfr-more', children: `+ ${messages.length - shownMessages.length} earlier` })
+            : null,
+        ],
+      }),
     ],
   })
 }

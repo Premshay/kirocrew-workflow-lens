@@ -80,6 +80,20 @@ The composition names come from the
 `pipeline` is a function of the Workflow script API; barrier, re-attempt, rolling and
 widening are this app's own.
 
+## DeepSeek Harness Agent Teams
+
+Workflow Lens also shows [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
+(dsh) Agent Teams. When KiroCrew drives dsh over ACP, only the Lead's turn reaches
+the gateway; its teammates work out of sight. The app reads the Lead's session log
+and shows the team as a run: the Lead and each teammate as agents, the shared task
+board, and the messages members send each other. Each member's latest answer opens
+like any agent output.
+
+It reads every `~/.local/share/dsh-*` home whose `cordis.patch.yml` mounts
+`dsh-experimental-agent-team`. Set `WORKFLOW_LENS_DSH_HOMES` (paths separated by
+`:`) to choose the homes yourself; set it empty to turn this source off. Logs are
+zstd-compressed, so this source needs Python 3.14 or newer.
+
 ## Install
 
 **Before you install:** the app has a Python backend that runs inside the gateway,
