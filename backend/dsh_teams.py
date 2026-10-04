@@ -127,6 +127,7 @@ def _summarize(log: Path) -> dict[str, Any]:
     answer = ""
     turn_text = ""
     tokens = 0
+    cached = 0
     tool_calls = 0
     members: dict[str, dict[str, Any]] = {}
     member_order: list[str] = []
@@ -165,7 +166,14 @@ def _summarize(log: Path) -> dict[str, Any]:
                 last_text = text
                 turn_text = text
             usage = data.get("usage") or {}
-            if isinstance(usage.get("totalTokens"), int):
+            # totalTokens folds in cacheReadTokens: the whole context, re-read on
+            # every step. Count what the step added (input + output) apart from it.
+            parts = [usage.get(k) for k in ("inputTokens", "outputTokens", "cacheWriteTokens")]
+            if any(isinstance(v, int) for v in parts):
+                tokens += sum(v for v in parts if isinstance(v, int))
+                if isinstance(usage.get("cacheReadTokens"), int):
+                    cached += usage["cacheReadTokens"]
+            elif isinstance(usage.get("totalTokens"), int):
                 tokens += usage["totalTokens"]
         elif kind == "tool/call":
             tool_calls += 1
@@ -207,6 +215,7 @@ def _summarize(log: Path) -> dict[str, Any]:
         "answer": answer,
         "turn_text": turn_text if open_turn else "",
         "tokens": tokens,
+        "cached_tokens": cached,
         "tool_calls": tool_calls,
         "pending_approvals": len(approvals),
         "members": [members[m] for m in member_order],
@@ -293,6 +302,7 @@ def _run(home: Path, lead: dict[str, Any], logs: dict[str, Path], now: float) ->
     names = {lead["id"]: "Lead"}
     agents = [_agent("Lead", lead["id"], lead, "Lead", now)]
     tokens = lead["tokens"]
+    cached_tokens = lead["cached_tokens"]
     tool_calls = lead["tool_calls"]
     updated = lead["mtime"]
     for member in lead["members"]:
@@ -306,6 +316,7 @@ def _run(home: Path, lead: dict[str, Any], logs: dict[str, Path], now: float) ->
         )
         if summary is not None:
             tokens += summary["tokens"]
+            cached_tokens += summary["cached_tokens"]
             tool_calls += summary["tool_calls"]
             updated = max(updated, summary["mtime"])
     working = any(a["turn_open"] for a in agents)
@@ -363,9 +374,7 @@ def _run(home: Path, lead: dict[str, Any], logs: dict[str, Path], now: float) ->
         ],
         "agents": agents,
         "tokens": tokens,
-        # Each step's totalTokens counts the whole context sent that step, so
-        # this sum re-counts the same context every step: name it for what it is.
-        "tokens_label": "Context tokens (summed per step)",
+        "cached_tokens": cached_tokens,
         "tool_calls": tool_calls,
         "duration_ms": None,
         "updated_at": updated,

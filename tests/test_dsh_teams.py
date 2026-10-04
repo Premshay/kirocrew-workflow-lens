@@ -128,8 +128,6 @@ def test_a_lead_with_teammates_reads_as_one_run(teams, tmp_path, monkeypatch) ->
     run = runs[0]
     assert run["run_id"] == f"dsh-{LEAD}"
     assert run["status"] == "completed"
-    # The sum re-counts each step's context, so it is not labelled plain "Tokens".
-    assert run["tokens_label"] == "Context tokens (summed per step)"
     assert [(a["label"], a["phase"]) for a in run["agents"]] == [
         ("Lead", "Lead"), ("alpha", "Teammates"), ("beta", "Teammates"),
     ]
@@ -174,6 +172,27 @@ def test_outputs_are_served_per_member_and_refuse_strangers(teams, tmp_path, mon
     assert teams.find_team_agent_output(run_id, ALPHA) == "ALPHA-OK"
     assert teams.find_team_agent_output(run_id, "../etc") is None
     assert teams.find_team_result("dsh-unknown") is None
+
+
+def test_cached_context_is_counted_apart_from_new_tokens(teams, tmp_path, monkeypatch) -> None:
+    _seed(tmp_path)
+    step = {
+        "type": "assistant/message",
+        "time": _t(1),
+        "data": {
+            "message": {"content": [{"type": "text", "text": "more"}]},
+            "usage": {"inputTokens": 12, "outputTokens": 3, "cacheReadTokens": 1000, "cacheWriteTokens": 0, "totalTokens": 1015},
+        },
+    }
+    log = next(tmp_path.glob(f"sessions/*/{LEAD}/session.v4.jsonl.zstd"))
+    from compression import zstd
+
+    log.write_bytes(log.read_bytes() + zstd.compress((json.dumps(step) + "\n").encode()))
+    monkeypatch.setenv(teams.HOMES_ENV, str(tmp_path))
+
+    run = teams.discover_team_runs()[0]
+    # totalTokens-only steps (50 + 100 + 100) count whole; the split step adds 15.
+    assert (run["tokens"], run["cached_tokens"]) == (265, 1000)
 
 
 def test_a_resumed_turn_shows_its_own_output_not_the_previous_answer(teams, tmp_path, monkeypatch) -> None:

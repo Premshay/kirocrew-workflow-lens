@@ -622,7 +622,9 @@ function RunCard({ run, expanded, onToggle }) {
   const counted = (value) => (value == null ? 'not counted yet' : Number(value).toLocaleString())
   const facts = [
     ['Agents', over ? `${agents.length}, none still running` : `${agents.length}, ${run.live_agents} live`],
-    [run.tokens_label || 'Tokens', counted(run.tokens)],
+    ['Tokens', counted(run.tokens)],
+    // Context re-read from cache each step, kept apart from what the run added.
+    ...(run.cached_tokens ? [['Cached', counted(run.cached_tokens)]] : []),
     ['Tool calls', counted(run.tool_calls)],
   ]
 
