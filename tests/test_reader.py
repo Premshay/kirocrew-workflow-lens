@@ -601,6 +601,30 @@ def test_a_live_run_read_from_its_journal_announces_no_output(tmp_path) -> None:
     assert run["has_result"] is False
 
 
+def test_a_live_run_counts_tool_calls_by_id_and_estimates_tokens(tmp_path) -> None:
+    """Claude Code logs a message once per content block, each copy with the
+    message's usage: tool calls are counted by id and tokens taken from the
+    latest message, so the copies are not counted twice."""
+    sidecars = tmp_path / "-home-user-repo" / "sess-1" / "subagents" / "workflows" / "wf_live"
+    sidecars.mkdir(parents=True)
+    (sidecars / "journal.jsonl").write_text(
+        json.dumps({"type": "workflow_phase", "index": 1, "title": "Read"}) + "\n",
+        encoding="utf-8",
+    )
+    usage = {"input_tokens": 5, "cache_creation_input_tokens": 100, "cache_read_input_tokens": 1000, "output_tokens": 20}
+    copy = {"message": {"id": "m1", "usage": usage, "content": [{"type": "tool_use", "id": "t1"}]}}
+    final = {"message": {"id": "m2", "usage": {**usage, "cache_read_input_tokens": 2000}, "content": [{"type": "text", "text": "done"}]}}
+    (sidecars / "agent-a1.jsonl").write_text(
+        "\n".join(json.dumps(e) for e in (copy, copy, final)) + "\n", encoding="utf-8"
+    )
+
+    run = cwr.discover_runs(tmp_path)[0]
+
+    assert run["tool_calls"] == 1
+    assert run["tokens"] == 5 + 100 + 2000 + 20
+    assert run["tokens_estimated"] is True
+
+
 def test_a_large_result_is_returned_whole() -> None:
     """A 40,000-character cap cut 19 of the 42 results on this machine, and the
     largest runs are the ones that matter. The text travels once, when a reader

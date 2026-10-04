@@ -622,7 +622,8 @@ function RunCard({ run, expanded, onToggle }) {
   const counted = (value) => (value == null ? 'not counted yet' : Number(value).toLocaleString())
   const facts = [
     ['Agents', over ? `${agents.length}, none still running` : `${agents.length}, ${run.live_agents} live`],
-    ['Tokens', counted(run.tokens)],
+    // A live Claude workflow's tokens are an estimate until its run file lands.
+    ['Tokens', run.tokens != null && run.tokens_estimated ? `≈ ${counted(run.tokens)}` : counted(run.tokens)],
     // Context re-read from cache each step, kept apart from what the run added.
     ...(run.cached_tokens ? [['Cached', counted(run.cached_tokens)]] : []),
     ['Tool calls', counted(run.tool_calls)],

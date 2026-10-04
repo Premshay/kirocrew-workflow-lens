@@ -798,6 +798,70 @@ def read_ordering(
     }
 
 
+#: Live totals per agent transcript, cached on its size and mtime: a running
+#: workflow is polled, and its transcripts only grow.
+_live_cache: dict[str, tuple[tuple[int, int], tuple[int, set[str]]]] = {}
+
+
+def _transcript_totals(path: Path) -> tuple[int, set[str]]:
+    """An agent's latest context size plus output, and its tool-call ids.
+
+    Claude Code logs one assistant message once per content block, each copy
+    carrying the message's usage, so usage is read from the latest message and
+    tool calls are counted by id rather than by line.
+    """
+    try:
+        stat = path.stat()
+    except OSError:
+        return 0, set()
+    key = (stat.st_size, stat.st_mtime_ns)
+    hit = _live_cache.get(str(path))
+    if hit is not None and hit[0] == key:
+        return hit[1]
+    usage: dict[str, Any] = {}
+    tool_ids: set[str] = set()
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return 0, set()
+    for line in lines:
+        try:
+            message = json.loads(line).get("message")
+        except (ValueError, AttributeError):
+            continue
+        if not isinstance(message, dict):
+            continue
+        for block in message.get("content") or []:
+            if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("id"):
+                tool_ids.add(str(block["id"]))
+        if isinstance(message.get("usage"), dict):
+            usage = message["usage"]
+    context = sum(
+        usage.get(k) or 0
+        for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")
+        if isinstance(usage.get(k) or 0, int)
+    )
+    totals = (context, tool_ids)
+    _live_cache[str(path)] = (key, totals)
+    return totals
+
+
+def live_totals(sidecar_dir: Path) -> tuple[int, int]:
+    """Estimated tokens and exact tool calls of a run that has no run file yet.
+
+    Tool calls match the run file's ``totalToolCalls`` once it is written. Its
+    ``totalTokens`` is close to, but not exactly, the sum of each agent's final
+    context, so the token figure is shown as an estimate until then.
+    """
+    tokens = 0
+    tool_ids: set[str] = set()
+    for path in sidecar_dir.glob("agent-*.jsonl"):
+        agent_tokens, agent_tools = _transcript_totals(path)
+        tokens += agent_tokens
+        tool_ids |= agent_tools
+    return tokens, len(tool_ids)
+
+
 def _run_from_journal(session_dir: Path, run_id: str) -> dict[str, Any] | None:
     """Reconstruct a run that has no run file yet.
 
@@ -847,6 +911,7 @@ def _run_from_journal(session_dir: Path, run_id: str) -> dict[str, Any] | None:
                 "returned": False,
             }
         )
+    live_tokens, live_tool_calls = live_totals(sidecar_dir)
     return {
         "run_id": run_id,
         # The run file holds the name; a live run has no run file, so the id is
@@ -859,8 +924,9 @@ def _run_from_journal(session_dir: Path, run_id: str) -> dict[str, Any] | None:
         "session_id": session_dir.name,
         "phases": [{"title": title, "detail": ""} for title in phases],
         "agents": agents,
-        "tokens": None,
-        "tool_calls": None,
+        "tokens": live_tokens or None,
+        "tokens_estimated": True,
+        "tool_calls": live_tool_calls,
         "duration_ms": None,
         "updated_at": max(newest, (sidecar_dir / "journal.jsonl").stat().st_mtime),
         "resumed_after_status": False,
