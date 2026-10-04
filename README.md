@@ -89,6 +89,9 @@ and shows the team as a run: the Lead and each teammate as agents, the shared ta
 board, and the messages members send each other. Each member's latest answer opens
 like any agent output.
 
+Task and message rows stack inside narrow panels, keeping descriptions and write
+paths at the panel's full width. Panels at least 480px wide use horizontal rows.
+
 It reads every `~/.local/share/dsh-*` home whose `cordis.patch.yml` mounts
 `dsh-experimental-agent-team`. Set `WORKFLOW_LENS_DSH_HOMES` (paths separated by
 `:`) to choose the homes yourself; set it empty to turn this source off. Logs are
