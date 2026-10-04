@@ -622,7 +622,7 @@ function RunCard({ run, expanded, onToggle }) {
   const counted = (value) => (value == null ? 'not counted yet' : Number(value).toLocaleString())
   const facts = [
     ['Agents', over ? `${agents.length}, none still running` : `${agents.length}, ${run.live_agents} live`],
-    ['Tokens', counted(run.tokens)],
+    [run.tokens_label || 'Tokens', counted(run.tokens)],
     ['Tool calls', counted(run.tool_calls)],
   ]
 

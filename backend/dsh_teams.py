@@ -205,6 +205,7 @@ def _summarize(log: Path) -> dict[str, Any]:
         "last_text": last_text,
         "last_tool": last_tool,
         "answer": answer,
+        "turn_text": turn_text if open_turn else "",
         "tokens": tokens,
         "tool_calls": tool_calls,
         "pending_approvals": len(approvals),
@@ -362,6 +363,9 @@ def _run(home: Path, lead: dict[str, Any], logs: dict[str, Path], now: float) ->
         ],
         "agents": agents,
         "tokens": tokens,
+        # Each step's totalTokens counts the whole context sent that step, so
+        # this sum re-counts the same context every step: name it for what it is.
+        "tokens_label": "Context tokens (summed per step)",
         "tool_calls": tool_calls,
         "duration_ms": None,
         "updated_at": updated,
@@ -428,4 +432,6 @@ def find_team_agent_output(run_id: str, agent_id: str) -> str | None:
     summary = _summary(logs[agent_id])
     if summary is None:
         return None
-    return summary["answer"] or summary["last_text"]
+    # A resumed session opens a new turn: its text so far is the output, not the
+    # answer the previous turn ended on.
+    return summary["turn_text"] or summary["answer"] or summary["last_text"]

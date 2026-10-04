@@ -128,6 +128,8 @@ def test_a_lead_with_teammates_reads_as_one_run(teams, tmp_path, monkeypatch) ->
     run = runs[0]
     assert run["run_id"] == f"dsh-{LEAD}"
     assert run["status"] == "completed"
+    # The sum re-counts each step's context, so it is not labelled plain "Tokens".
+    assert run["tokens_label"] == "Context tokens (summed per step)"
     assert [(a["label"], a["phase"]) for a in run["agents"]] == [
         ("Lead", "Lead"), ("alpha", "Teammates"), ("beta", "Teammates"),
     ]
@@ -172,6 +174,28 @@ def test_outputs_are_served_per_member_and_refuse_strangers(teams, tmp_path, mon
     assert teams.find_team_agent_output(run_id, ALPHA) == "ALPHA-OK"
     assert teams.find_team_agent_output(run_id, "../etc") is None
     assert teams.find_team_result("dsh-unknown") is None
+
+
+def test_a_resumed_turn_shows_its_own_output_not_the_previous_answer(teams, tmp_path, monkeypatch) -> None:
+    _seed(tmp_path)
+    resumed = [
+        {"type": "turn/start", "time": _t(3), "data": {"turn": 2}},
+        {
+            "type": "assistant/message",
+            "time": _t(2),
+            "data": {"message": {"content": [{"type": "text", "text": "Resumed: running the suite"}]}},
+        },
+    ]
+    log = next(tmp_path.glob(f"sessions/*/{LEAD}/session.v4.jsonl.zstd"))
+    from compression import zstd
+
+    log.write_bytes(log.read_bytes() + zstd.compress(("\n".join(json.dumps(e) for e in resumed) + "\n").encode()))
+    monkeypatch.setenv(teams.HOMES_ENV, str(tmp_path))
+    run_id = f"dsh-{LEAD}"
+
+    assert teams.find_team_agent_output(run_id, LEAD) == "Resumed: running the suite"
+    # The run's result is still the last completed turn's answer.
+    assert teams.find_team_result(run_id) == "Both done: ALPHA-OK BETA-OK"
     assert teams.find_team_result("wf_claude_run") is None
 
 
