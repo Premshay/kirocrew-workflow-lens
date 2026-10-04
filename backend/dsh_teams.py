@@ -256,13 +256,15 @@ def _agent(name: str, member_id: str, summary: dict[str, Any] | None, phase: str
     last = summary["last_time"] or summary["mtime"]
     working = summary["open_turn"] and not failed and now - last < STALE_AFTER_SECONDS
     activity_state = (
-        "waiting_approval" if summary["open_turn"] and summary["pending_approvals"]
+        "no_recent_activity" if summary["open_turn"] and not working
+        else "waiting_approval" if summary["open_turn"] and summary["pending_approvals"]
         else "recent_activity" if working
         else "no_recent_activity" if summary["open_turn"]
         else "ended"
     )
     prefix = (
         "Awaiting tool approval" if activity_state == "waiting_approval"
+        else "Unanswered tool approval; no recent activity" if activity_state == "no_recent_activity" and summary["pending_approvals"]
         else "No recent activity; completion unconfirmed" if activity_state == "no_recent_activity"
         else "Recent activity" if working
         else ""

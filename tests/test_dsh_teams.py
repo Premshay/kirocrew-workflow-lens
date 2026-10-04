@@ -196,7 +196,8 @@ def test_unanswered_approval_is_waiting_and_not_returned(teams, tmp_path):
     assert not agent["returned"]
     later = time.time() + teams.STALE_AFTER_SECONDS + 60
     stale = teams._agent("Lead", LEAD, summary, "Lead", later)
-    assert stale["activity_state"] == "waiting_approval"
+    assert stale["activity_state"] == "no_recent_activity"
+    assert stale["last_step"].startswith("Unanswered tool approval; no recent activity")
     assert not stale["returned"]
 
 
