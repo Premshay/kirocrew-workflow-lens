@@ -86,6 +86,8 @@ def _decorate(run: dict[str, Any], now: float) -> dict[str, Any]:
         # ago is done, not live.
         if agent.get("turn_open") is False and state == "live":
             state = "stale"
+        if agent.get("activity_state") in ("waiting_approval", "no_recent_activity"):
+            state = "stale"
         agents.append({**agent, "state": state, "idle": idle})
     return {
         **run,

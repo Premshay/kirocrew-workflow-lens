@@ -120,8 +120,8 @@ it declares no storage.
 ## Known limits
 
 - **Backend changes do not load on a file copy.** The gateway caches an app's Python
-  for its process lifetime. After updating `backend/`, touch the files and run
-  `kirocrew app disable workflow-lens && kirocrew app enable workflow-lens`. UI changes
+  for its process lifetime. After staging `backend/` changes, restart the gateway
+  with operator approval. UI changes
   need no reload.
 - **Older runs report less.** Runs written before Claude Code recorded a phase on each
   journal event carry no phase attribution, so their shape reads as fan-out at most.

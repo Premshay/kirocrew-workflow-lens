@@ -134,6 +134,7 @@ def _summarize(log: Path) -> dict[str, Any]:
     messages: dict[str, dict[str, Any]] = {}
     message_order: list[str] = []
     delivered: set[str] = set()
+    approvals: set[str] = set()
     for event in _events(log):
         kind = event.get("type")
         data = event.get("data") if isinstance(event.get("data"), dict) else {}
@@ -155,6 +156,7 @@ def _summarize(log: Path) -> dict[str, Any]:
             turn_text = ""
         elif kind == "turn/end":
             open_turn = False
+            approvals.clear()
             if turn_text:
                 answer = turn_text
         elif kind == "assistant/message":
@@ -169,6 +171,10 @@ def _summarize(log: Path) -> dict[str, Any]:
             tool_calls += 1
             args = " ".join(str(data.get("arguments") or "").split())
             last_tool = f"{data.get('name') or ''} {args[:80]}".strip()
+        elif kind == "approval/asked":
+            approvals.add(str(data.get("id") or ""))
+        elif kind == "approval/decided":
+            approvals.discard(str(data.get("id") or ""))
         elif kind == "team/member":
             member = data.get("member") or {}
             mid = str(member.get("id") or "")
@@ -201,6 +207,7 @@ def _summarize(log: Path) -> dict[str, Any]:
         "answer": answer,
         "tokens": tokens,
         "tool_calls": tool_calls,
+        "pending_approvals": len(approvals),
         "members": [members[m] for m in member_order],
         "tasks": list(tasks.values()),
         "messages": [
@@ -248,10 +255,19 @@ def _agent(name: str, member_id: str, summary: dict[str, Any] | None, phase: str
         }
     last = summary["last_time"] or summary["mtime"]
     working = summary["open_turn"] and not failed and now - last < STALE_AFTER_SECONDS
-    step = error or (
-        f"working · {summary['last_tool']}" if working and summary["last_tool"]
-        else _preview(summary["last_text"])
+    activity_state = (
+        "waiting_approval" if summary["open_turn"] and summary["pending_approvals"]
+        else "recent_activity" if working
+        else "no_recent_activity" if summary["open_turn"]
+        else "ended"
     )
+    prefix = (
+        "Awaiting tool approval" if activity_state == "waiting_approval"
+        else "No recent activity; completion unconfirmed" if activity_state == "no_recent_activity"
+        else "Recent activity" if working
+        else ""
+    )
+    step = error or (f"{prefix} · {summary['last_tool']}" if prefix else _preview(summary["last_text"]))
     return {
         "agent_id": member_id,
         "label": name,
@@ -261,9 +277,10 @@ def _agent(name: str, member_id: str, summary: dict[str, Any] | None, phase: str
         "shape": "",
         "last_active_at": last,
         "last_step": step,
+        "activity_state": activity_state,
         "last_tool": summary["last_tool"] if working else "",
         "has_output": bool(summary["answer"] or summary["last_text"]),
-        "returned": not working and not failed and bool(summary["answer"]),
+        "returned": not summary["open_turn"] and not failed and bool(summary["answer"]),
         "turn_open": working,
     }
 
@@ -318,11 +335,14 @@ def _run(home: Path, lead: dict[str, Any], logs: dict[str, Path], now: float) ->
     if lead["messages"]:
         summary_bits.append(f"{len(lead['messages'])} messages")
     result = lead["answer"] if not agents[0]["turn_open"] else ""
-    if working:
+    if any(a.get("activity_state") == "waiting_approval" for a in agents):
+        status = "waiting"
+    elif working:
         status = "running"
-    elif lead["open_turn"]:
-        # Its last turn never logged an end: the process stopped under it.
-        status = "stopped"
+    elif lead["open_turn"] or any(a.get("activity_state") == "no_recent_activity" for a in agents):
+        status = "incomplete"
+    elif any(t["status"] != "completed" for t in tasks):
+        status = "incomplete"
     else:
         status = "completed"
     return {

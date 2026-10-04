@@ -152,15 +152,14 @@ def test_the_board_keeps_each_task_latest_revision_and_drops_deleted(teams, tmp_
     ]
 
 
-def test_an_open_turn_is_running_until_it_goes_silent(teams, tmp_path, monkeypatch) -> None:
-    """A Lead whose process died never logs its turn end; it must not run forever."""
+def test_silent_open_turn_is_incomplete_not_proven_stopped(teams, tmp_path, monkeypatch) -> None:
     _seed(tmp_path, lead_open=True)
     monkeypatch.setenv(teams.HOMES_ENV, str(tmp_path))
 
     assert teams.discover_team_runs()[0]["status"] == "running"
     later = time.time() + teams.STALE_AFTER_SECONDS + 60
     run = teams.discover_team_runs(now=later)[0]
-    assert run["status"] == "stopped"
+    assert run["status"] == "incomplete"
     assert not run["agents"][0]["turn_open"]
 
 
@@ -181,6 +180,39 @@ def test_a_session_without_teammates_is_not_a_team(teams, tmp_path, monkeypatch)
     monkeypatch.setenv(teams.HOMES_ENV, str(tmp_path))
 
     assert teams.discover_team_runs() == []
+
+
+def test_unanswered_approval_is_waiting_and_not_returned(teams, tmp_path):
+    events = [
+        {"type": "session", "id": LEAD},
+        {"type": "turn/start", "time": _t(), "data": {}},
+        {"type": "tool/call", "time": _t(), "data": {"name": "bash"}},
+        {"type": "approval/asked", "time": _t(), "data": {"id": "ask-1"}},
+    ]
+    summary = teams._summary(_write(tmp_path, LEAD, events))
+    agent = teams._agent("Lead", LEAD, summary, "Lead", time.time())
+    assert agent["activity_state"] == "waiting_approval"
+    assert agent["last_step"].startswith("Awaiting tool approval")
+    assert not agent["returned"]
+    later = time.time() + teams.STALE_AFTER_SECONDS + 60
+    stale = teams._agent("Lead", LEAD, summary, "Lead", later)
+    assert stale["activity_state"] == "waiting_approval"
+    assert not stale["returned"]
+
+
+def test_answered_approval_does_not_remain_waiting(teams, tmp_path):
+    events = [
+        {"type": "session", "id": LEAD},
+        {"type": "turn/start", "time": _t(), "data": {}},
+        {"type": "approval/asked", "time": _t(), "data": {"id": "ask-1"}},
+        {"type": "approval/decided", "time": _t(), "data": {"id": "ask-1"}},
+    ]
+    summary = teams._summary(_write(tmp_path, LEAD, events))
+    agent = teams._agent("Lead", LEAD, summary, "Lead", time.time())
+    assert agent["activity_state"] == "recent_activity"
+    stale = teams._agent("Lead", LEAD, summary, "Lead", time.time() + teams.STALE_AFTER_SECONDS + 60)
+    assert stale["activity_state"] == "no_recent_activity"
+    assert not stale["returned"]
 
 
 def test_default_homes_are_only_those_that_mount_teams(teams, tmp_path, monkeypatch) -> None:

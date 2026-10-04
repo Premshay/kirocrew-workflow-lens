@@ -129,14 +129,15 @@ const CSS = `
 .wfr-flow{overflow-x:auto}
 .wfr-flow svg{display:block;overflow:visible}
 .wfr-team{margin-top:16px;border-top:1px solid var(--border);padding-top:13px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px 32px}
-.wfr-team>*{min-width:0}
+.wfr-team>*{min-width:0;container-type:inline-size}
 @container (min-width:820px){.wfr-team{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
 .wfr-team-title{font-size:13px;font-weight:600;color:var(--text-strong,var(--text));margin-bottom:6px}
-.wfr-team-row{display:flex;align-items:baseline;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px;line-height:1.5}
+.wfr-team-row{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;line-height:1.5}
 .wfr-team-row:last-child{border-bottom:0}
-.wfr-team-main{flex:1;min-width:0;overflow-wrap:anywhere;color:var(--text)}
-.wfr-team-meta{color:var(--muted);white-space:nowrap}
+.wfr-team-main{min-width:0;max-width:100%;overflow-wrap:anywhere;color:var(--text)}
+.wfr-team-meta{min-width:0;max-width:100%;overflow-wrap:anywhere;color:var(--muted)}
 .wfr-team-scope{font-family:var(--mono,ui-monospace,monospace);font-size:11px;color:var(--muted)}
+@container (min-width:480px){.wfr-team-row{flex-direction:row;align-items:baseline;gap:8px}.wfr-team-main{flex:1}.wfr-team-meta{max-width:30%}.wfr-team-row>.wfr-pill{flex-shrink:0}}
 @keyframes wfpulse{0%,100%{opacity:1}50%{opacity:.35}}
 .wfr-live-dot{animation:wfpulse 1.8s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){.wfr-live-dot{animation:none}}
@@ -158,9 +159,16 @@ function runIsOver(run) {
 // RETURNED is a fact the journal records, and it outranks idleness once the
 // agent has stopped writing.
 function agentMark(agent, over) {
+  if (agent.activity_state === 'waiting_approval' || agent.activity_state === 'no_recent_activity') {
+    const idle = STATE_STYLE.stale
+    return {
+      word: agent.activity_state === 'waiting_approval' ? 'awaiting approval' : 'no recent activity',
+      bg: idle.bg, fg: idle.fg, fill: 'var(--bg)', pulse: false,
+    }
+  }
   if (agent.state === 'live') {
     const live = STATE_STYLE.live
-    return { word: 'live', bg: live.bg, fg: live.fg, fill: live.fg, pulse: true }
+    return { word: agent.activity_state === 'recent_activity' ? 'recent activity' : 'live', bg: live.bg, fg: live.fg, fill: live.fg, pulse: true }
   }
   if (agent.returned) {
     return {
@@ -462,7 +470,7 @@ function AgentRow({ run, agent, maxIdle, over }) {
           // The agent's own liveness, not the run's: a completed run is not
           // "over" in the stopped sense, and its returned agents read as still
           // running their last tool.
-          _jsx('span', { children: agent.state === 'live' ? 'running ' : 'was running ' }),
+          _jsx('span', { children: agent.activity_state ? 'last tool ' : agent.state === 'live' ? 'running ' : 'was running ' }),
           agent.last_tool,
         ],
       }) : null,
