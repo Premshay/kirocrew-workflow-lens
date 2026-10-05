@@ -90,7 +90,7 @@ const CSS = `
 .wfr-agent:first-child{padding-top:0}
 .wfr-agent:last-child{border-bottom:0;padding-bottom:2px}
 .wfr-agent-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-.wfr-agent-name{font-size:13px;font-weight:600;color:var(--text-strong,var(--text))}
+.wfr-agent-name{font-size:13px;font-weight:600;color:var(--text-strong,var(--text));min-width:0;overflow-wrap:anywhere}
 .wfr-agent-attempt{font-weight:400;color:var(--muted)}
 .wfr-agent-idle{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .wfr-step{font-size:13px;color:var(--text);margin-top:4px;line-height:1.5;max-width:80ch;overflow-wrap:anywhere}
