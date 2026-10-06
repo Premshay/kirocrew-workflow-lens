@@ -207,6 +207,38 @@ def test_a_respawned_label_is_listed_once_per_agent(tmp_path) -> None:
     assert {a["agent_id"] for a in run["agents"]} == {"agent-aaa", "agent-bbb"}
 
 
+def test_an_agent_left_on_the_default_model_still_names_its_model(tmp_path) -> None:
+    """The sidecar records ``model`` only when the spawner passed one.
+
+    The transcript names what actually served each turn, so it wins over the
+    sidecar and covers the agents the sidecar says nothing about.
+    """
+    workflows = _project(tmp_path, "-home-user-repo", "sess-1")
+    (workflows / "wf_abc123-def.json").write_text(json.dumps(_run_payload()), encoding="utf-8")
+    sidecars = workflows.parent / "subagents" / "workflows" / "wf_abc123-def"
+    sidecars.mkdir(parents=True)
+    for name, label, asked, served in (
+        ("agent-aaa", "implement:task5", None, "claude-opus-5-5"),
+        ("agent-bbb", "implement:task6", "sonnet", "claude-sonnet-5-5"),
+    ):
+        meta = {"description": label} if asked is None else {"description": label, "model": asked}
+        (sidecars / f"{name}.meta.json").write_text(json.dumps(meta), encoding="utf-8")
+        (sidecars / f"{name}.jsonl").write_text(
+            "\n".join(
+                json.dumps({"type": "assistant", "message": {"model": model, "content": [
+                    {"type": "text", "text": "working"}]}})
+                for model in (served, "<synthetic>")
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    run = cwr.discover_runs(tmp_path)[0]
+
+    by_label = {a["label"]: a["model"] for a in run["agents"]}
+    assert by_label == {"implement:task5": "claude-opus-5-5", "implement:task6": "claude-sonnet-5-5"}
+
+
 def test_agent_activity_comes_from_its_transcript(tmp_path) -> None:
     workflows = _project(tmp_path, "-home-user-repo", "sess-1")
     (workflows / "wf_abc123-def.json").write_text(

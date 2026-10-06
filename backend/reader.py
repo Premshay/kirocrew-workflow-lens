@@ -113,8 +113,30 @@ def _assistant_parts(raw: str):
                 yield part
 
 
-def _last_step(transcript: Path) -> tuple[str, str, bool]:
-    """The agent's newest narration, tool call, and whether it has an output.
+def _transcript_model(raw: str) -> str:
+    """The model that answered the agent's newest assistant turn, or ``""``.
+
+    The sidecar records ``model`` only when the spawner named one, so an agent
+    left on its backend's default had no chip at all. Every assistant message
+    carries the model that actually served it. ``<synthetic>`` marks a message
+    the harness wrote itself (an error, a usage limit) and names no model.
+    """
+    for line in reversed(raw.splitlines()):
+        try:
+            entry = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(entry, dict) or entry.get("type") != "assistant":
+            continue
+        message = entry.get("message")
+        model = str(message.get("model") or "") if isinstance(message, dict) else ""
+        if model and model != "<synthetic>":
+            return model
+    return ""
+
+
+def _last_step(transcript: Path) -> tuple[str, str, bool, str]:
+    """The agent's newest narration, tool call, whether it has an output, and its model.
 
     Narration is what makes a run readable -- "Retrying the push" says more than
     any status word -- and the tool line says what it is doing right now. Thinking
@@ -124,11 +146,11 @@ def _last_step(transcript: Path) -> tuple[str, str, bool]:
     Whether an output EXISTS is decided in this same pass, because the tail is
     already read and parsed here; rendering it is left to the route that serves
     it, so a poll over fourteen agents never formats fourteen reports nobody
-    opened.
+    opened. The model is read from the same tail for the same reason.
     """
     raw = _transcript_tail(transcript)
     if not raw:
-        return "", "", False
+        return "", "", False, ""
 
     step = tool = ""
     has_output = False
@@ -150,7 +172,7 @@ def _last_step(transcript: Path) -> tuple[str, str, bool]:
                 tool = f"{name}: {detail}" if name and detail else name
             if name == STRUCTURED_OUTPUT_TOOL and part.get("input"):
                 has_output = True
-    return step, tool, has_output
+    return step, tool, has_output, _transcript_model(raw)
 
 
 def agent_output(transcript: Path) -> str:
@@ -205,7 +227,7 @@ def _agent_sidecars(session_dir: Path, run_id: str) -> tuple[list[dict], float]:
             last_active = transcript.stat().st_mtime
         except OSError:
             last_active = path.stat().st_mtime
-        step, tool, has_output = _last_step(transcript)
+        step, tool, has_output, ran_on = _last_step(transcript)
         records.append(
             {
                 "agent_id": agent_id,
@@ -214,6 +236,9 @@ def _agent_sidecars(session_dir: Path, run_id: str) -> tuple[list[dict], float]:
                 "last_tool": tool,
                 "has_output": has_output,
                 **payload,
+                # What served the agent, not what the spawner asked for: the
+                # sidecar names a model only when one was passed explicitly.
+                "model": ran_on or str(payload.get("model") or ""),
             }
         )
         newest = max(newest, last_active, path.stat().st_mtime)
