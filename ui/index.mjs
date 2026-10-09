@@ -619,7 +619,7 @@ function RunCard({ run, expanded, onToggle }) {
   // to align on. Totals are written with the run file, when a run stops, so a
   // run still going has none yet -- and printing that absence as 0 claimed it
   // had done no work.
-  const counted = (value) => (value == null ? 'not counted yet' : Number(value).toLocaleString())
+  const counted = (value) => (value == null ? (run.source === 'kirocrew' ? 'not recorded' : 'not counted yet') : Number(value).toLocaleString())
   const facts = [
     ['Agents', over ? `${agents.length}, none still running` : `${agents.length}, ${run.live_agents} live`],
     // A live Claude workflow's tokens are an estimate until its run file lands.

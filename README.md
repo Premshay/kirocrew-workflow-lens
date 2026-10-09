@@ -98,12 +98,14 @@ zstd-compressed, so this source needs Python 3.14 or newer.
 
 ## Native KiroCrew workflows
 
-Lens also reads KiroCrew's existing workflow run store, honoring `workflows.dir`.
+Lens also reads KiroCrew's authorized live workflow view. Saved checkpoints can
+lag behind active work, so native cards use the same run inventory and access
+checks as the gateway's Workflows page.
 Native runs carry a **KiroCrew workflow** label and share the phase, agent and
 output views. Agent status comes from recorded lifecycle events; missing token
 and tool-call totals remain unknown. Runs still authoring appear even before
 they spawn an agent. Results are fetched only when opened. Nothing is copied
-or written back to the store, and temporary runs excluded by the store stay
+or written back to the store, and temporary runs stay
 excluded from Lens.
 
 ## Install

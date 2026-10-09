@@ -51,12 +51,12 @@ def _native() -> Any:
     return _sibling("native.py", "workflow_lens_native")
 
 
-def _all_runs(now: float) -> list[dict[str, Any]]:
+def _all_runs(now: float, native_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Runs from all supported sources, newest first."""
     runs = (
         list(_reader().discover_runs())
         + _teams().discover_team_runs(now)
-        + _native().discover_runs(_reader().render_result)
+        + _native().discover_runs(_reader().render_result, native_records)
     )
     runs.sort(key=lambda r: r["updated_at"], reverse=True)
     return runs
@@ -103,7 +103,8 @@ async def _list_runs(request: web.Request, _ctx: AppContext) -> web.Response:
     except ValueError:
         raise web.HTTPBadRequest(text="limit must be a number") from None
     now = time.time()
-    runs = await asyncio.to_thread(_all_runs, now)
+    records = await _native().live_records(request)
+    runs = await asyncio.to_thread(_all_runs, now, records)
     # Stopped runs from before the window are left out unless asked for, and
     # counted either way so the page can offer them. Nothing is removed from disk.
     older = {run["run_id"] for run in runs if reader.is_older(run, now)}
@@ -124,7 +125,8 @@ async def _get_run(request: web.Request, _ctx: AppContext) -> web.Response:
     _require_user(request)
     run_id = request.match_info["run_id"]
     now = time.time()
-    for run in await asyncio.to_thread(_all_runs, now):
+    records = await _native().live_records(request)
+    for run in await asyncio.to_thread(_all_runs, now, records):
         if run["run_id"] == run_id:
             return web.json_response({"run": _decorate(run, now), "generated_at": now})
     raise web.HTTPNotFound(text=f"no run named {run_id}")
@@ -142,7 +144,8 @@ async def _get_result(request: web.Request, _ctx: AppContext) -> web.Response:
     run_id = request.match_info["run_id"]
     teams = _teams()
     if run_id.startswith(_native().RUN_PREFIX):
-        text = await asyncio.to_thread(_native().find_result, run_id, reader.render_result)
+        records = await _native().live_records(request)
+        text = await asyncio.to_thread(_native().find_result, run_id, reader.render_result, records)
     elif run_id.startswith(teams.RUN_PREFIX):
         text = teams.find_team_result(run_id)
     else:
@@ -171,8 +174,9 @@ async def _get_agent_output(request: web.Request, _ctx: AppContext) -> web.Respo
     agent_id = request.match_info["agent_id"]
     teams = _teams()
     if run_id.startswith(_native().RUN_PREFIX):
+        records = await _native().live_records(request)
         text = await asyncio.to_thread(
-            _native().find_agent_output, run_id, agent_id, reader.render_result
+            _native().find_agent_output, run_id, agent_id, reader.render_result, records
         )
     elif run_id.startswith(teams.RUN_PREFIX):
         text = teams.find_team_agent_output(run_id, agent_id)

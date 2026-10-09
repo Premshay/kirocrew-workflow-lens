@@ -1,13 +1,15 @@
-"""Project KiroCrew's durable workflow inventory into Lens's read-only views."""
+"""Project KiroCrew's authorized live workflow view into Lens cards."""
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from kiro_crew.workflows.store import WorkflowRunStore
+from aiohttp import web
+from kiro_crew.dashboard.handlers import workflows as workflow_api
 
 RUN_PREFIX = "kirocrew:"
 TERMINAL = {"finished", "completed", "failed", "cancelled", "killed", "error", "aborted"}
@@ -24,12 +26,30 @@ def _stamp(value: str | None) -> float:
         return 0.0
 
 
-def _records() -> list[dict[str, Any]]:
-    return WorkflowRunStore().load_all()
-
-
-def _find(run_id: str) -> dict[str, Any] | None:
-    return next((r for r in _records() if RUN_PREFIX + r["run_id"] == run_id), None)
+async def live_records(request: web.Request) -> list[dict[str, Any]]:
+    response = await workflow_api.api_workflow_runs(request)
+    if response.status != 200:
+        if response.status == 403:
+            raise web.HTTPForbidden(text="Native workflow access refused")
+        raise web.HTTPServiceUnavailable(text="Native workflows unavailable; check gateway workflow service")
+    inventory = json.loads(response.body)["runs"]
+    service = request.app["state"].workflow_service
+    records = []
+    for run in inventory:
+        snapshot = service.result(run["run_id"])
+        if snapshot is None or snapshot.get("memory_mode", "persistent") != "persistent":
+            continue
+        record = {
+            key: snapshot.get(key)
+            for key in (
+                "run_id", "name", "status", "error", "events", "result",
+                "agent_results", "partial_results", "execution_context", "session_key",
+            )
+        }
+        record["agent_results"] = record["agent_results"] or record.pop("partial_results") or {}
+        records.append(record)
+    redacted = await workflow_api._json_response_off_loop(records)
+    return json.loads(redacted.body)
 
 
 def _project(record: dict[str, Any], render: Callable[[Any], str]) -> dict[str, Any]:
@@ -104,17 +124,17 @@ def _project(record: dict[str, Any], render: Callable[[Any], str]) -> dict[str, 
     }
 
 
-def discover_runs(render: Callable[[Any], str]) -> list[dict[str, Any]]:
-    return [_project(record, render) for record in _records()]
+def discover_runs(render: Callable[[Any], str], records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_project(record, render) for record in records]
 
 
-def find_result(run_id: str, render: Callable[[Any], str]) -> str | None:
-    record = _find(run_id)
+def find_result(run_id: str, render: Callable[[Any], str], records: list[dict[str, Any]]) -> str | None:
+    record = next((r for r in records if RUN_PREFIX + r["run_id"] == run_id), None)
     return render(record.get("result")) if record else None
 
 
-def find_agent_output(run_id: str, agent_id: str, render: Callable[[Any], str]) -> str | None:
-    record = _find(run_id)
+def find_agent_output(run_id: str, agent_id: str, render: Callable[[Any], str], records: list[dict[str, Any]]) -> str | None:
+    record = next((r for r in records if RUN_PREFIX + r["run_id"] == run_id), None)
     if record is None:
         return None
     for event in record.get("events") or []:

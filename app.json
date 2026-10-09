@@ -1,7 +1,7 @@
 {
   "name": "workflow-lens",
   "displayName": "Workflow Lens",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Follow KiroCrew workflows, Claude Code workflows and DeepSeek teams. Understand progress and workflow patterns, and read individual agent outputs.",
   "author": "premshay",
   "license": "MIT",

@@ -15,7 +15,7 @@ _BACKEND = Path(__file__).resolve().parents[1] / "backend"
 
 
 @pytest.fixture()
-def routes_module():
+def routes_module(monkeypatch):
     sys.path.insert(0, str(_BACKEND.parent))
     spec = importlib.util.spec_from_file_location(
         "workflow_lens_routes", _BACKEND / "routes.py"
@@ -23,6 +23,11 @@ def routes_module():
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    async def records(request):
+        from kiro_crew.workflows.store import WorkflowRunStore
+        return WorkflowRunStore().load_all()
+
+    monkeypatch.setattr(module._native(), "live_records", records)
     return module
 
 

@@ -283,6 +283,10 @@ async def test_the_list_route_merges_teams_with_workflow_runs(tmp_path, monkeypa
     _seed(home)
     monkeypatch.setenv("WORKFLOW_LENS_DSH_HOMES", str(home))
     monkeypatch.setattr(routes._reader(), "DEFAULT_PROJECTS_ROOT", tmp_path / "claude")
+    async def native_records(request):
+        return []
+
+    monkeypatch.setattr(routes._native(), "live_records", native_records)
 
     class Req(dict):
         query: dict = {}
