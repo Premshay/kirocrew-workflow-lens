@@ -1,6 +1,6 @@
 # Workflow Lens
 
-**Make Claude Code's dynamic workflows visible as they happen.** Follow progress,
+**Follow KiroCrew workflows, Claude Code workflows and DeepSeek teams.** Follow progress,
 understand workflow patterns, and read individual subagent outputs. This
 [KiroCrew](https://github.com/kirodotdev/KiroCrew) app reads the artifacts Claude Code
 writes to disk, making work that is usually opaque easier to follow and learn from.
@@ -12,10 +12,9 @@ The runs in these screenshots are invented for illustration.
 
 ## Who it is for
 
-**Anyone whose Claude Code sessions run dynamic workflows**, whether started from the
-Claude Code CLI or from a KiroCrew session backed by Claude. The app reads the
-artifacts Claude Code writes under `~/.claude/projects` on the gateway's machine, so
-on a machine with no workflow runs the page is empty.
+**Anyone running KiroCrew workflows, Claude Code workflows or DeepSeek teams.**
+The app reads their artifacts on the gateway's machine, including Claude Code's
+`~/.claude/projects` tree. On a machine with no supported runs the page is empty.
 
 ## When to use it
 
@@ -97,6 +96,16 @@ It reads every `~/.local/share/dsh-*` home whose `cordis.patch.yml` mounts
 `:`) to choose the homes yourself; set it empty to turn this source off. Logs are
 zstd-compressed, so this source needs Python 3.14 or newer.
 
+## Native KiroCrew workflows
+
+Lens also reads KiroCrew's existing workflow run store, honoring `workflows.dir`.
+Native runs carry a **KiroCrew workflow** label and share the phase, agent and
+output views. Agent status comes from recorded lifecycle events; missing token
+and tool-call totals remain unknown. Runs still authoring appear even before
+they spawn an agent. Results are fetched only when opened. Nothing is copied
+or written back to the store, and temporary runs excluded by the store stay
+excluded from Lens.
+
 ## Install
 
 **Before you install:** the app has a Python backend that runs inside the gateway,
@@ -122,10 +131,10 @@ it declares no storage.
 
 ## Known limits
 
-- **Backend changes do not load on a file copy.** The gateway caches an app's Python
-  for its process lifetime. After staging `backend/` changes, restart the gateway
-  with operator approval. UI changes
-  need no reload.
+- **Backend reload depends on the gateway version.** Gateways with app hook
+  reconciliation reload changed hook files automatically. On older versions,
+  restart the gateway with operator approval after staging backend changes.
+  UI changes need no gateway restart.
 - **Older runs report less.** Runs written before Claude Code recorded a phase on each
   journal event carry no phase attribution, so their shape reads as fan-out at most.
 - **A run still in progress has no totals.** Claude Code writes token and tool-call

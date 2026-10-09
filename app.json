@@ -1,8 +1,8 @@
 {
   "name": "workflow-lens",
   "displayName": "Workflow Lens",
-  "version": "2.0.2",
-  "description": "Make Claude Code's dynamic workflows visible as they happen. Follow progress, understand workflow patterns, and read individual subagent outputs.",
+  "version": "2.1.0",
+  "description": "Follow KiroCrew workflows, Claude Code workflows and DeepSeek teams. Understand progress and workflow patterns, and read individual agent outputs.",
   "author": "premshay",
   "license": "MIT",
   "iconPath": "assets/icon.png",

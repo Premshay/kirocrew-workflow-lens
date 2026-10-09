@@ -14,3 +14,10 @@ def _no_live_dsh_homes(monkeypatch):
     none; a test that wants homes sets its own.
     """
     monkeypatch.setenv("WORKFLOW_LENS_DSH_HOMES", "")
+
+
+@pytest.fixture(autouse=True)
+def _no_live_native_runs(monkeypatch, tmp_path):
+    from kiro_crew.workflows import store
+
+    monkeypatch.setattr(store, "default_workflows_dir", lambda: tmp_path / "native")

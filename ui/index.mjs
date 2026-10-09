@@ -648,6 +648,7 @@ function RunCard({ run, expanded, onToggle }) {
               })
             : pill(statusWord, statusBg, statusFg),
           run.source === 'dsh-team' ? pill('DeepSeek team', 'var(--bg-hover, #f3f4f6)', 'var(--muted, #6b7280)') : null,
+          run.source === 'kirocrew' ? pill('KiroCrew workflow', 'var(--bg-hover, #f3f4f6)', 'var(--muted, #6b7280)') : null,
           run.resumed_after_status && !run.live_agents ? pill('resumed after it stopped', 'var(--warn-subtle, #fef3c7)', 'var(--warn, #b45309)') : null,
           _jsx('span', { className: 'wfr-spacer', children: ghostButton(expanded ? 'Collapse' : `All ${agents.length} agents`, onToggle, false) }),
         ],
@@ -1075,7 +1076,7 @@ export default function WorkflowLens() {
     return () => clearInterval(t)
   }, [load])
 
-  const shown = liveOnly ? runs.filter(r => r.live_agents > 0) : runs
+  const shown = liveOnly ? runs.filter(r => r.live_agents > 0 || r.status === 'running') : runs
   const liveTotal = runs.reduce((n, r) => n + r.live_agents, 0)
 
   // `width:100%` is load-bearing, not belt-and-braces. The page is a flex item
@@ -1110,7 +1111,7 @@ export default function WorkflowLens() {
               }),
               _jsx('h2', { className: 'wfr-title', children: 'Workflow Lens' }),
               // The name alone does not say whose workflows these are.
-              _jsx('span', { className: 'wfr-stamp', children: 'for Claude Code dynamic workflows' }),
+              _jsx('span', { className: 'wfr-stamp', children: 'KiroCrew workflows, Claude Code workflows and DeepSeek teams' }),
               pill(liveTotal ? `${liveTotal} agents live` : 'nothing running', liveTotal ? 'var(--ok-subtle, #d1fae5)' : 'var(--bg-hover, #f3f4f6)', liveTotal ? 'var(--ok, #047857)' : 'var(--muted, #6b7280)'),
             ],
           }),
@@ -1131,7 +1132,7 @@ export default function WorkflowLens() {
         className: 'wfr-note',
         children: liveOnly
           ? 'No run has a live agent right now.'
-          : older.count ? `No run active in the last ${older.hours} hours.` : 'No Claude Code workflow runs found yet.',
+          : older.count ? `No run active in the last ${older.hours} hours.` : 'No workflow runs found yet.',
       }) : null,
       ...shown.map(run => _jsx(RunCard, {
         run,
