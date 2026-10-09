@@ -48,12 +48,14 @@ def test_inventory_keeps_native_ids_distinct_and_metrics_unknown():
     assert run["run_id"] == "kirocrew:wf_one"
     assert run["source"] == "kirocrew"
     assert run["tokens"] is None and run["tool_calls"] is None
-    assert run["phases"] == [{"title": "Read", "detail": ""}]
+    assert run["phases"] == [{"title": "Read", "detail": "", "entered": True}]
     decorated = routes._decorate(run, 2000000000)
     assert decorated["live_agents"] == 1
     assert decorated["agents"][0]["state"] == "stale"
     assert decorated["agents"][0]["returned"] is True
     assert decorated["agents"][1]["state"] == "live"
+    assert decorated["phase_shape"][0]["entered"] is True
+    assert run["summary"].startswith("Current phase: Read.")
     assert not routes._reader().is_older(run, 2000000000)
 
 

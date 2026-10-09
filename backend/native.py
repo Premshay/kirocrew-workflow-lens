@@ -53,7 +53,7 @@ async def live_records(request: web.Request) -> list[dict[str, Any]]:
 
 
 def _project(record: dict[str, Any], render: Callable[[Any], str]) -> dict[str, Any]:
-    phases: list[dict[str, str]] = []
+    phases: list[dict[str, Any]] = []
     agents: dict[str, dict[str, Any]] = {}
     timestamps: list[float] = []
     duration_ms = None
@@ -67,7 +67,7 @@ def _project(record: dict[str, Any], render: Callable[[Any], str]) -> dict[str, 
         if kind == "phase_started":
             title = str(data.get("title") or "")
             if title and not any(p["title"] == title for p in phases):
-                phases.append({"title": title, "detail": ""})
+                phases.append({"title": title, "detail": "", "entered": True})
         elif kind == "agent_started":
             agent_id = str(data["agent_id"])
             output = results.get(str(data["call_index"]))
@@ -101,6 +101,8 @@ def _project(record: dict[str, Any], render: Callable[[Any], str]) -> dict[str, 
         for agent in agents.values():
             agent["native_active"] = False
     result = render(record.get("result"))
+    if phases and record.get("status") == "running":
+        summary = f"Current phase: {phases[-1]['title']}." + (f" Last log: {summary}" if summary else "")
     context = record.get("execution_context") or {}
     return {
         "run_id": RUN_PREFIX + record["run_id"],

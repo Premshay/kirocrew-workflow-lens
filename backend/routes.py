@@ -71,6 +71,10 @@ def _decorate(run: dict[str, Any], now: float) -> dict[str, Any]:
     """Attach the derived views the page renders but the reader does not store."""
     reader = _reader()
     shape = reader.infer_shape(run)
+    if run.get("source") == "kirocrew":
+        entered = {phase["title"] for phase in run.get("phases") or [] if phase.get("entered")}
+        for phase in shape["phases"]:
+            phase["entered"] = phase["title"] in entered
     agents = []
     for agent in run.get("agents") or []:
         state, idle = reader._agent_state(agent, now)

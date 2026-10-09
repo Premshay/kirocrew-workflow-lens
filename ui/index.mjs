@@ -159,6 +159,10 @@ function runIsOver(run) {
 // RETURNED is a fact the journal records, and it outranks idleness once the
 // agent has stopped writing.
 function agentMark(agent, over) {
+  if (agent.native_active) {
+    const idle = STATE_STYLE.stale
+    return { word: 'awaiting completion', bg: idle.bg, fg: idle.fg, fill: 'var(--bg)', pulse: false }
+  }
   if (agent.activity_state === 'waiting_approval' || agent.activity_state === 'no_recent_activity') {
     const idle = STATE_STYLE.stale
     return {
@@ -368,7 +372,7 @@ function PhaseFlow({ run }) {
       labels.push(_jsx('text', {
         x: LANE_X + 4, y: tops[i] + 4,
         style: { fontSize: '11px', fill: 'var(--muted)' },
-        children: runIsOver(run) ? 'never ran' : 'not started',
+        children: phases[i].entered ? 'entered' : runIsOver(run) ? 'never ran' : 'not started',
       }, `n${i}`))
       return
     }
@@ -408,7 +412,7 @@ function PhaseFlow({ run }) {
 
 function ProgressMeter({ phases }) {
   if (!phases || !phases.length) return null
-  const started = phases.filter(p => p.count > 0).length
+  const started = phases.filter(p => p.entered || p.count > 0).length
   return _jsxs('div', {
     className: 'wfr-meter',
     children: [
@@ -416,12 +420,12 @@ function ProgressMeter({ phases }) {
         className: 'wfr-meter-track',
         children: phases.map((p, i) => _jsx('div', {
           className: 'wfr-meter-seg',
-          style: { background: p.count > 0 ? ACCENT : 'var(--border)' },
+          style: { background: p.entered || p.count > 0 ? ACCENT : 'var(--border)' },
         }, i)),
       }),
       _jsxs('span', {
         className: 'wfr-meter-count',
-        children: [started, ' / ', phases.length, ' phases'],
+        children: [started, ' / ', phases.length, phases.some(p => p.entered) ? ' phases entered' : ' phases'],
       }),
     ],
   })
@@ -460,7 +464,7 @@ function AgentRow({ run, agent, maxIdle, over }) {
             ],
           }),
           agent.model ? pill(agent.model, 'var(--bg)', 'var(--muted)') : null,
-          _jsx('span', { className: 'wfr-agent-idle', children: agent.idle || '' }),
+          _jsx('span', { className: 'wfr-agent-idle', children: run.source === 'kirocrew' && agent.idle ? `${agent.idle} since last event` : agent.idle || '' }),
         ],
       }),
       agent.last_step ? _jsx('div', { className: 'wfr-step', children: agent.last_step }) : null,
@@ -470,12 +474,18 @@ function AgentRow({ run, agent, maxIdle, over }) {
           // The agent's own liveness, not the run's: a completed run is not
           // "over" in the stopped sense, and its returned agents read as still
           // running their last tool.
-          _jsx('span', { children: agent.activity_state ? 'last tool ' : agent.state === 'live' ? 'running ' : 'was running ' }),
+          _jsx('span', { children: run.source === 'kirocrew' || agent.activity_state ? 'last tool ' : agent.state === 'live' ? 'running ' : 'was running ' }),
           agent.last_tool,
         ],
       }) : null,
-      _jsx(IdleBar, { agent, maxIdle }),
+      run.source !== 'kirocrew' ? _jsx(IdleBar, { agent, maxIdle }) : null,
       agent.has_output && agent.agent_id ? _jsx(AgentOutput, { run, agent }) : null,
+      run.source === 'kirocrew' && !agent.has_output ? _jsx('div', {
+        className: 'wfr-note',
+        children: agent.native_active
+          ? 'No answer returned yet. This view does not stream the agent’s text.'
+          : 'KiroCrew has not published an output for this agent.',
+      }) : null,
     ],
   })
 }
@@ -602,15 +612,15 @@ function RunCard({ run, expanded, onToggle }) {
   // "completed" or "killed" while its agents work. Observation beats the file in
   // both directions: an agent writing seconds ago means the run is running,
   // whatever its file still claims.
-  const statusWord = run.live_agents ? 'running' : (run.status || 'unknown')
-  const statusTitle = run.live_agents && run.status && run.status !== 'running'
+  const statusWord = run.source === 'kirocrew' ? (run.status === 'running' ? 'running (reported)' : run.status || 'unknown') : run.live_agents ? 'running' : (run.status || 'unknown')
+  const statusTitle = run.source !== 'kirocrew' && run.live_agents && run.status && run.status !== 'running'
     ? `an agent wrote seconds ago, so this run is going. Its file still says "${run.status}" because that file is written when a run STOPS, and a resume does not rewrite it.`
     : ''
   const statusBg = run.live_agents ? 'var(--ok-subtle, #d1fae5)' : terminal ? 'var(--danger-subtle, #fee2e2)' : 'var(--bg-hover, #f3f4f6)'
   const statusFg = run.live_agents ? 'var(--ok, #047857)' : terminal ? 'var(--danger, #b91c1c)' : 'var(--muted, #6b7280)'
   const over = runIsOver(run)
   const agents = withAttempts(run.agents)
-  const neverRan = (run.phase_shape || []).filter(p => !p.count).length
+  const neverRan = (run.phase_shape || []).filter(p => !p.count && !p.entered).length
   const shown = expanded ? agents : agents.slice(0, 4)
   const maxIdle = Math.max(0, ...agents.map(a => parseFloat(a.idle) || 0))
 
@@ -621,7 +631,7 @@ function RunCard({ run, expanded, onToggle }) {
   // had done no work.
   const counted = (value) => (value == null ? (run.source === 'kirocrew' ? 'not recorded' : 'not counted yet') : Number(value).toLocaleString())
   const facts = [
-    ['Agents', over ? `${agents.length}, none still running` : `${agents.length}, ${run.live_agents} live`],
+    ['Agents', run.source === 'kirocrew' ? `${agents.length}, ${agents.filter(a => a.native_active).length} awaiting completion` : over ? `${agents.length}, none still running` : `${agents.length}, ${run.live_agents} live`],
     // A live Claude workflow's tokens are an estimate until its run file lands.
     ['Tokens', run.tokens != null && run.tokens_estimated ? `≈ ${counted(run.tokens)}` : counted(run.tokens)],
     // Context re-read from cache each step, kept apart from what the run added.
@@ -1077,7 +1087,8 @@ export default function WorkflowLens() {
   }, [load])
 
   const shown = liveOnly ? runs.filter(r => r.live_agents > 0 || r.status === 'running') : runs
-  const liveTotal = runs.reduce((n, r) => n + r.live_agents, 0)
+  const liveTotal = runs.filter(r => r.source !== 'kirocrew').reduce((n, r) => n + r.live_agents, 0)
+  const nativePending = runs.filter(r => r.source === 'kirocrew').reduce((n, r) => n + (r.agents || []).filter(a => a.native_active).length, 0)
 
   // `width:100%` is load-bearing, not belt-and-braces. The page is a flex item
   // in the dashboard's column-flex <main>, and a flex item with `auto` cross
@@ -1112,7 +1123,7 @@ export default function WorkflowLens() {
               _jsx('h2', { className: 'wfr-title', children: 'Workflow Lens' }),
               // The name alone does not say whose workflows these are.
               _jsx('span', { className: 'wfr-stamp', children: 'KiroCrew workflows, Claude Code workflows and DeepSeek teams' }),
-              pill(liveTotal ? `${liveTotal} agents live` : 'nothing running', liveTotal ? 'var(--ok-subtle, #d1fae5)' : 'var(--bg-hover, #f3f4f6)', liveTotal ? 'var(--ok, #047857)' : 'var(--muted, #6b7280)'),
+              pill(nativePending ? `${nativePending} awaiting completion${liveTotal ? ` · ${liveTotal} agents live` : ''}` : liveTotal ? `${liveTotal} agents live` : 'no recent agent activity', liveTotal ? 'var(--ok-subtle, #d1fae5)' : 'var(--bg-hover, #f3f4f6)', liveTotal ? 'var(--ok, #047857)' : 'var(--muted, #6b7280)'),
             ],
           }),
           _jsxs('div', {
