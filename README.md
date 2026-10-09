@@ -41,6 +41,9 @@ on a machine with no workflow runs the page is empty.
 - **Launchers** — start a new workflow in a chosen shape, with the task filled in or
   the prompt copied.
 
+A stopped run that has been quiet for 24 hours leaves the list, and **Show older (N)**
+brings it back. A run still going is always listed. Nothing is deleted.
+
 ## Walkthrough: compare ideas, then inspect the reasoning
 
 With the app installed and a workflow-capable Claude Code session available:

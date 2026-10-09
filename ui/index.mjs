@@ -1050,20 +1050,24 @@ export default function WorkflowLens() {
   const [liveOnly, setLiveOnly] = useState(false)
   const [expanded, setExpanded] = useState({})
   const [fetchedAt, setFetchedAt] = useState(null)
+  // Stopped runs past the server's window stay off the page until asked for.
+  const [showOlder, setShowOlder] = useState(false)
+  const [older, setOlder] = useState({ count: 0, hours: 24 })
 
   const load = useCallback(async () => {
     try {
-      const resp = await fetch('/api/apps/workflow-lens/runs?limit=20')
+      const resp = await fetch(`/api/apps/workflow-lens/runs?limit=20${showOlder ? '&older=1' : ''}`)
       if (!resp.ok) { setError(`gateway answered ${resp.status}`); setLoading(false); return }
       const body = await resp.json()
       setRuns(body.runs || [])
+      setOlder({ count: body.older_count || 0, hours: Math.round((body.older_after_seconds || 86400) / 3600) })
       setFetchedAt(new Date())
       setError('')
     } catch (e) {
       setError(String(e && e.message ? e.message : e))
     }
     setLoading(false)
-  }, [])
+  }, [showOlder])
 
   useEffect(() => {
     load()
@@ -1125,13 +1129,21 @@ export default function WorkflowLens() {
       loading && !runs.length ? _jsx('div', { className: 'wfr-note', children: 'Reading workflow artifacts…' }) : null,
       !loading && !shown.length ? _jsx('div', {
         className: 'wfr-note',
-        children: liveOnly ? 'No run has a live agent right now.' : 'No Claude Code workflow runs found yet.',
+        children: liveOnly
+          ? 'No run has a live agent right now.'
+          : older.count ? `No run active in the last ${older.hours} hours.` : 'No Claude Code workflow runs found yet.',
       }) : null,
       ...shown.map(run => _jsx(RunCard, {
         run,
         expanded: !!expanded[run.run_id],
         onToggle: () => setExpanded(e => ({ ...e, [run.run_id]: !e[run.run_id] })),
       }, run.run_id)),
+      // Under the list, because what it reveals lands there. Stopped runs quiet
+      // for longer than the window; a run still going is never among them.
+      older.count && !liveOnly ? _jsx('div', {
+        className: 'wfr-more',
+        children: ghostButton(showOlder ? 'Hide older' : `Show older (${older.count})`, () => setShowOlder(v => !v), false, showOlder),
+      }) : null,
     ],
   })
 }

@@ -1157,3 +1157,30 @@ def test_field_names_read_as_words_and_keep_their_acronyms() -> None:
     assert cwr._label("fatal_flaw") == "Fatal flaw"
     assert cwr._label("filesChanged") == "Files changed"
     assert cwr._label("PR_number") == "PR number"
+
+
+def test_a_stopped_run_quiet_past_the_window_is_older() -> None:
+    now = 10 * cwr.OLDER_AFTER_SECONDS
+    stopped = {"status": "completed", "updated_at": now - cwr.OLDER_AFTER_SECONDS - 1, "agents": []}
+    recent = {**stopped, "updated_at": now - 60}
+
+    assert cwr.is_older(stopped, now) is True
+    assert cwr.is_older(recent, now) is False
+
+
+def test_a_run_that_has_not_stopped_is_never_older() -> None:
+    now = 10 * cwr.OLDER_AFTER_SECONDS
+    for status in ("running", "waiting", "incomplete", ""):
+        assert cwr.is_older({"status": status, "updated_at": 0, "agents": []}, now) is False
+
+
+def test_an_agent_working_after_its_run_file_keeps_the_run_recent() -> None:
+    """A resume does not rewrite the run file; its agents say it is going."""
+    now = 10 * cwr.OLDER_AFTER_SECONDS
+    resumed = {
+        "status": "completed",
+        "updated_at": now - 3 * cwr.OLDER_AFTER_SECONDS,
+        "agents": [{"last_active_at": now - 60}, {"last_active_at": None}],
+    }
+
+    assert cwr.is_older(resumed, now) is False

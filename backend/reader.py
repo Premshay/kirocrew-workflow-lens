@@ -660,6 +660,27 @@ def read_run(run_file: Path) -> dict[str, Any] | None:
 #: Statuses a run file uses for work it believes has stopped.
 _TERMINAL_STATUSES = frozenset({"killed", "completed", "failed", "error", "aborted"})
 
+#: A stopped run quiet for longer than this leaves the default list. Its record
+#: stays on disk and the page can still show it on request.
+OLDER_AFTER_SECONDS = 24 * 3600
+
+
+def is_older(run: dict[str, Any], now: float) -> bool:
+    """Whether *run* has stopped and been quiet past :data:`OLDER_AFTER_SECONDS`.
+
+    Quiet is read off the newest of the run file and its agents, not the file
+    alone: a resume spawns agents without rewriting the file, so a "completed"
+    file can be days old while its agents work. A run that has not stopped is
+    never older, however long it has been silent.
+    """
+    if run.get("status") not in _TERMINAL_STATUSES:
+        return False
+    last = max(
+        [float(run.get("updated_at") or 0)]
+        + [float(a["last_active_at"]) for a in run.get("agents") or [] if a.get("last_active_at")]
+    )
+    return now - last > OLDER_AFTER_SECONDS
+
 
 def _journal_events(sidecar_dir: Path) -> list[dict[str, Any]]:
     """The run's own journal, one JSON object per line."""

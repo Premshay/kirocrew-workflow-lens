@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -245,3 +246,52 @@ async def test_an_agents_output_requires_a_dashboard_session(routes_module) -> N
     request.match_info["agent_id"] = "agent-0"
     with pytest.raises(web.HTTPUnauthorized):
         await routes_module._get_agent_output(request, None)
+
+
+def _age(tmp_path: Path, seconds: float) -> None:
+    """Backdate wf_one's run file and sidecars by *seconds*."""
+    session = tmp_path / "-home-user-repo" / "sess-1"
+    for path in [*session.rglob("*.json"), *session.rglob("*.jsonl")]:
+        stamp = path.stat().st_mtime - seconds
+        os.utime(path, (stamp, stamp))
+
+
+@pytest.mark.asyncio
+async def test_a_stopped_run_past_the_window_is_counted_not_listed(
+    routes_module, tmp_path, monkeypatch
+) -> None:
+    _seed(tmp_path)
+    reader = routes_module._reader()
+    _age(tmp_path, reader.OLDER_AFTER_SECONDS + 60)
+    monkeypatch.setattr(reader, "DEFAULT_PROJECTS_ROOT", tmp_path)
+
+    body = json.loads((await routes_module._list_runs(FakeRequest(), None)).body)
+    assert body["runs"] == []
+    assert body["older_count"] == 1
+    assert body["older_after_seconds"] == reader.OLDER_AFTER_SECONDS
+
+    shown = json.loads(
+        (await routes_module._list_runs(FakeRequest(query={"older": "1"}), None)).body
+    )
+    assert [r["run_id"] for r in shown["runs"]] == ["wf_one"]
+    assert shown["older_count"] == 1
+    # Hiding is a view, never a deletion.
+    assert (tmp_path / "-home-user-repo" / "sess-1" / "workflows" / "wf_one.json").is_file()
+
+
+@pytest.mark.asyncio
+async def test_a_run_still_going_is_listed_however_old(
+    routes_module, tmp_path, monkeypatch
+) -> None:
+    _seed(tmp_path)
+    workflows = tmp_path / "-home-user-repo" / "sess-1" / "workflows"
+    payload = json.loads((workflows / "wf_one.json").read_text())
+    payload["status"] = "running"
+    (workflows / "wf_one.json").write_text(json.dumps(payload), encoding="utf-8")
+    reader = routes_module._reader()
+    _age(tmp_path, 3 * reader.OLDER_AFTER_SECONDS)
+    monkeypatch.setattr(reader, "DEFAULT_PROJECTS_ROOT", tmp_path)
+
+    body = json.loads((await routes_module._list_runs(FakeRequest(), None)).body)
+    assert [r["run_id"] for r in body["runs"]] == ["wf_one"]
+    assert body["older_count"] == 0

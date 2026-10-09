@@ -108,10 +108,17 @@ async def _list_runs(request: web.Request, _ctx: AppContext) -> web.Response:
     except ValueError:
         raise web.HTTPBadRequest(text="limit must be a number") from None
     now = time.time()
-    runs = [_decorate(run, now) for run in _all_runs(now)[:limit]]
+    runs = _all_runs(now)
+    # Stopped runs from before the window are left out unless asked for, and
+    # counted either way so the page can offer them. Nothing is removed from disk.
+    older = {run["run_id"] for run in runs if reader.is_older(run, now)}
+    if request.query.get("older") != "1":
+        runs = [run for run in runs if run["run_id"] not in older]
     return web.json_response(
         {
-            "runs": runs,
+            "runs": [_decorate(run, now) for run in runs[:limit]],
+            "older_count": len(older),
+            "older_after_seconds": reader.OLDER_AFTER_SECONDS,
             "generated_at": now,
             "stale_after_seconds": reader.STALE_AFTER_SECONDS,
         }
